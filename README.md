@@ -109,10 +109,11 @@ and schemeless json
 
 In terms of SQL (only on postgresql) you can do things such as
 
-`
 select additional_info -> 'address'  from User_  -- selects only the adress field into the json
 
 
-select additional_info from User_ where  additional_info ->> 'country' = 'US';  --  filter by country field
-`
+select additional_info from User_ where  additional_info ->> 'country' = 'US';  --  filter by country field  
+
+
+
 
