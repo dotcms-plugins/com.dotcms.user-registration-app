@@ -50,8 +50,12 @@ public class UserResource {
 	}
 
 	private final Map<String, List<String>> rolesMap =
-			map("member",     list(Role.DOTCMS_FRONT_END_USER, "cms_member"),
-				"subscriber", list(Role.DOTCMS_FRONT_END_USER, "cms_subscriber"));
+			//map("member",     list(Role.DOTCMS_FRONT_END_USER, "cms_member"),
+			//	"subscriber", list(Role.DOTCMS_FRONT_END_USER, "cms_subscriber"));
+
+			map("advertiser",     list(Role.DOTCMS_FRONT_END_USER, "advertiser"),
+				"seller", list(Role.DOTCMS_FRONT_END_USER, "seller"),
+				"leader", list(Role.DOTCMS_FRONT_END_USER, "leader"));
 
 	/**
 	 *
