@@ -10,8 +10,7 @@ repositories {
 }
 
 dependencies {
-    compile('com.dotcms:dotcms:21.04') { transitive = true }
-    //compile fileTree(dir: '../../../tomcat8/webapps/ROOT/WEB-INF/lib/', include: '*.jar')
+    compile('com.dotcms:dotcms:22.03') { transitive = true }
 }
 
 import java.util.jar.*
@@ -99,5 +98,5 @@ task fragmentJar(type: Jar) {
 fragmentJar.dependsOn 'readManifesttAttributes'
 
 task wrapper(type: Wrapper) {
-    gradleVersion = '4.2'
+    gradleVersion = '4.10.2'
 }

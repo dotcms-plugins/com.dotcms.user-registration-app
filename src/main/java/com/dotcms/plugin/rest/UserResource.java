@@ -10,13 +10,7 @@ import com.dotmarketing.business.RoleAPI;
 import com.dotmarketing.business.UserAPI;
 import com.dotmarketing.exception.DotDataException;
 import com.dotmarketing.exception.DotSecurityException;
-import com.dotmarketing.util.ActivityLogger;
-import com.dotmarketing.util.AdminLogger;
-import com.dotmarketing.util.DateUtil;
-import com.dotmarketing.util.Logger;
-import com.dotmarketing.util.UUIDGenerator;
-import com.dotmarketing.util.UUIDUtil;
-import com.dotmarketing.util.UtilMethods;
+import com.dotmarketing.util.*;
 import com.liferay.portal.model.User;
 import org.glassfish.jersey.server.JSONP;
 
@@ -37,7 +31,7 @@ import java.util.Map;
 import static com.dotcms.util.CollectionsUtils.list;
 import static com.dotcms.util.CollectionsUtils.map;
 
-@Path("/v3/users")
+@Path("/v1/users")
 public class UserResource {
 
     private final WebResource webResource = new WebResource();
@@ -49,11 +43,27 @@ public class UserResource {
 		this.roleAPI = APILocator.getRoleAPI();
 	}
 
+	/**
+	 * Map of roles
+	 * The key is the type we sent in the JSON Body
+	 * The value should be the list of roles that we want the user get assigned, the role is search by key NOT by name.
+	 * In case a roleKey is sent and it doesn't exists, the role will be created under the Root Role.
+	 *
+	 * Note: A user needs the Role.DOTCMS_BACK_END_USER to be able to log in into the dotCMS.
+	 *
+	 */
 	private final Map<String, List<String>> rolesMap =
-			map("member",     list(Role.DOTCMS_FRONT_END_USER, "cms_member"),
-				"subscriber", list(Role.DOTCMS_FRONT_END_USER, "cms_subscriber"));
+			map(
+					//DO NOT REMOVE THESE 3 MAPPINGS
+					"frontend",     list(Role.DOTCMS_FRONT_END_USER),
+				"backend", list(Role.DOTCMS_BACK_END_USER),
+				"admin", list(Role.CMS_ADMINISTRATOR_ROLE,Role.DOTCMS_BACK_END_USER)
+					//ADD NEW MAPPINGS BELOW
+					//e.g "publisher", list(Role.DOTCMS_BACK_END_USER,"publisher")
+			);
 
 	/**
+	 * The user calling the endpoint needs to be able to view Portlets ROLES and USERS.
 	 *
 	 * @param httpServletRequest
 	 * @param createUserForm
@@ -70,21 +80,19 @@ public class UserResource {
 
 		final User modUser = new WebResource.InitBuilder(webResource)
 				.requestAndResponse(httpServletRequest, httpServletResponse)
-				// todo: any permission to check
+				.rejectWhenNoUser(true)
+				.requiredPortlet(PortletID.ROLES.toString(),PortletID.USERS.toString())
 				.init().getUser();
 
 		final User userToUpdated = this.createNewUser(null == modUser? APILocator.systemUser(): modUser, createUserForm);
-
-		// todo: send an action email
-
 		return Response.ok(new ResponseEntityView(map("userID", userToUpdated.getUserId(),
 				 "user", userToUpdated.toMap()))).build(); // 200
 	} // create.
 
 	protected User createNewUser(final User modUser, final CreateUserForm createUserForm) throws DotDataException, DotSecurityException, ParseException {
 
-		final String nameID       = "userId-" + UUIDUtil.uuid();
-		final User user = this.userAPI.createUser(nameID, createUserForm.getEmail());
+		final String userId       = "userId-" + UUIDUtil.uuid();
+		final User user = this.userAPI.createUser(userId, createUserForm.getEmail());
 
 		user.setFirstName(createUserForm.getFirstName());
 
@@ -121,13 +129,13 @@ public class UserResource {
 			user.setAdditionalInfo(createUserForm.getAdditionalInfo());
 		}
 
-		user.setActive(false); // need validation confirmation email
+		user.setActive(true);
 		this.userAPI.save(user, modUser, false);
-		Logger.debug(this,  ()-> "User with NameID '" + nameID + "' and email '" +
+		Logger.debug(this,  ()-> "User with userId '" + userId + "' and email '" +
 				createUserForm.getEmail() + "' has been created.");
 
-		final String type = UtilMethods.isSet(createUserForm.getType())?createUserForm.getType():"subscriber";
-		final List<String> roleKeys = this.rolesMap.getOrDefault(type, Collections.emptyList());
+		final String type = UtilMethods.isSet(createUserForm.getType())?createUserForm.getType():"frontend";
+		final List<String> roleKeys = this.rolesMap.getOrDefault(type, Collections.EMPTY_LIST);
 
 		for (final String roleKey : roleKeys) {
 
@@ -167,15 +175,10 @@ public class UserResource {
 		role.setName(roleKey);
 		role.setRoleKey(roleKey);
 		role.setEditUsers(true);
-		role.setEditPermissions(false);
-		role.setEditLayouts(false);
+		role.setEditPermissions(true);
+		role.setEditLayouts(true);
 		role.setDescription("");
 		role.setId(UUIDGenerator.generateUuid());
-
-		// Setting SYSTEM role as a parent
-		role.setSystem(isSystem);
-		final Role parentRole = roleAPI.loadRoleByKey(Role.SYSTEM);
-		role.setParent(parentRole.getId());
 
 		final String date = DateUtil.getCurrentDate();
 
