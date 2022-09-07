@@ -8,7 +8,9 @@ import com.dotmarketing.util.UtilMethods;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
+import java.util.Collections;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -17,7 +19,8 @@ import java.util.Map;
 @JsonDeserialize(builder = CreateUserForm.Builder.class)
 public final class CreateUserForm extends Validated  {
 
-
+    private String userId;
+    private final boolean active;
     @NotNull
     @NotBlank
     private final String firstName;
@@ -32,13 +35,14 @@ public final class CreateUserForm extends Validated  {
     private final long    languageId;
     private final String  timeZoneId;
     private final char[] password;
-    @NotNull
-    @NotBlank
-    private String    type;
+
     private final Map<String, String> additionalInfo;
+
+    private final List<String> roles;
 
     private CreateUserForm(CreateUserForm.Builder builder) {
 
+        this.active = builder.active;
         this.firstName = builder.firstName;
         this.middleName = builder.middleName;
         this.lastName = builder.lastName;
@@ -49,8 +53,9 @@ public final class CreateUserForm extends Validated  {
         this.languageId = builder.languageId;
         this.timeZoneId = builder.timeZoneId;
         this.password = builder.password;
-        this.type     = builder.type;
         this.additionalInfo = builder.additionalInfo;
+        this.roles = UtilMethods.isSet(builder.roles)?builder.roles: Collections.emptyList();
+        this.userId = builder.userId;
 
         checkValid();
         if (!UtilMethods.isSet(this.password)) {
@@ -58,8 +63,12 @@ public final class CreateUserForm extends Validated  {
         }
     }
 
-    public String getType() {
-        return type;
+    public String getUserId() {
+        return userId;
+    }
+
+    public boolean isActive() {
+        return active;
     }
 
     public String getFirstName() {
@@ -106,7 +115,13 @@ public final class CreateUserForm extends Validated  {
         return additionalInfo;
     }
 
+    public List<String> getRoles() {
+        return roles;
+    }
+
     public static final class Builder {
+        @JsonProperty private String userId;
+        @JsonProperty private boolean active;
         @JsonProperty private String firstName;
         @JsonProperty private String middleName;
         @JsonProperty private String lastName;
@@ -117,14 +132,23 @@ public final class CreateUserForm extends Validated  {
         @JsonProperty private long    languageId = -1l;
         @JsonProperty private String    timeZoneId;
         @JsonProperty private char[]    password;
-        @JsonProperty private String    type;
         @JsonProperty private Map<String, String>    additionalInfo;
 
+        @JsonProperty private List<String> roles;
         public Builder() {
         }
 
-        public Builder type(String type) {
-            this.type = type;
+        public Builder userId(String userId) {
+            this.userId = userId;
+            return this;
+        }
+        public Builder roles(List<String> roles) {
+            this.roles = roles;
+            return this;
+        }
+
+        public Builder active(boolean active) {
+            this.active = active;
             return this;
         }
 

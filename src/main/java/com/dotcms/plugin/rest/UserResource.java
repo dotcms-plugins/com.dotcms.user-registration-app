@@ -56,14 +56,14 @@ public class UserResource {
 			map(
 					//DO NOT REMOVE THESE 3 MAPPINGS
 					"frontend",     list(Role.DOTCMS_FRONT_END_USER),
-				"backend", list(Role.DOTCMS_BACK_END_USER),
-				"admin", list(Role.CMS_ADMINISTRATOR_ROLE,Role.DOTCMS_BACK_END_USER)
+				"backend",    list(Role.DOTCMS_BACK_END_USER),
+				"admin",      list(Role.CMS_ADMINISTRATOR_ROLE, Role.DOTCMS_BACK_END_USER)
 					//ADD NEW MAPPINGS BELOW
 					//e.g "publisher", list(Role.DOTCMS_BACK_END_USER,"publisher")
 			);
 
 	/**
-	 * The user calling the endpoint needs to be able to view Portlets ROLES and USERS.
+	 * The user calling the endpoint needs to be able to view.
 	 *
 	 * @param httpServletRequest
 	 * @param createUserForm
@@ -80,18 +80,20 @@ public class UserResource {
 
 		final User modUser = new WebResource.InitBuilder(webResource)
 				.requestAndResponse(httpServletRequest, httpServletResponse)
-				.rejectWhenNoUser(true)
-				.requiredPortlet(PortletID.ROLES.toString(),PortletID.USERS.toString())
 				.init().getUser();
 
-		final User userToUpdated = this.createNewUser(null == modUser? APILocator.systemUser(): modUser, createUserForm);
+		final boolean isRoleAdministrator = modUser.isAdmin() || (APILocator.getLayoutAPI().doesUserHaveAccessToPortlet(PortletID.ROLES.toString(), modUser) &&
+				APILocator.getLayoutAPI().doesUserHaveAccessToPortlet(PortletID.USERS.toString(), modUser));
+		final User userToUpdated = this.createNewUser(null == modUser? APILocator.systemUser(): modUser,
+				isRoleAdministrator, createUserForm);
 		return Response.ok(new ResponseEntityView(map("userID", userToUpdated.getUserId(),
 				 "user", userToUpdated.toMap()))).build(); // 200
 	} // create.
 
-	protected User createNewUser(final User modUser, final CreateUserForm createUserForm) throws DotDataException, DotSecurityException, ParseException {
+	protected User createNewUser(final User modUser, final boolean isRoleAdministrator,
+								 final CreateUserForm createUserForm) throws DotDataException, DotSecurityException, ParseException {
 
-		final String userId       = "userId-" + UUIDUtil.uuid();
+		final String userId = UtilMethods.isSet(createUserForm.getUserId())?createUserForm.getUserId(): "userId-" + UUIDUtil.uuid();
 		final User user = this.userAPI.createUser(userId, createUserForm.getEmail());
 
 		user.setFirstName(createUserForm.getFirstName());
@@ -129,13 +131,19 @@ public class UserResource {
 			user.setAdditionalInfo(createUserForm.getAdditionalInfo());
 		}
 
-		user.setActive(true);
+		List<String> roleKeys = list(Role.DOTCMS_FRONT_END_USER);
+
+		if (isRoleAdministrator) {
+			user.setActive(createUserForm.isActive());
+
+			if (!createUserForm.getRoles().isEmpty()) {
+				roleKeys = createUserForm.getRoles();
+			}
+		}
+
 		this.userAPI.save(user, modUser, false);
 		Logger.debug(this,  ()-> "User with userId '" + userId + "' and email '" +
 				createUserForm.getEmail() + "' has been created.");
-
-		final String type = UtilMethods.isSet(createUserForm.getType())?createUserForm.getType():"frontend";
-		final List<String> roleKeys = this.rolesMap.getOrDefault(type, Collections.EMPTY_LIST);
 
 		for (final String roleKey : roleKeys) {
 
@@ -144,6 +152,7 @@ public class UserResource {
 
 		return user;
 	}
+
 
 	private void addRole(final User user, final String roleKey, final boolean createRole, final boolean isSystem)
 			throws DotDataException {
