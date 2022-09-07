@@ -1,5 +1,6 @@
 package com.dotcms.plugin.rest;
 
+import com.dotcms.rest.AnonymousAccess;
 import com.dotcms.rest.ResponseEntityView;
 import com.dotcms.rest.WebResource;
 import com.dotcms.rest.annotation.NoCache;
@@ -10,13 +11,7 @@ import com.dotmarketing.business.RoleAPI;
 import com.dotmarketing.business.UserAPI;
 import com.dotmarketing.exception.DotDataException;
 import com.dotmarketing.exception.DotSecurityException;
-import com.dotmarketing.util.ActivityLogger;
-import com.dotmarketing.util.AdminLogger;
-import com.dotmarketing.util.DateUtil;
-import com.dotmarketing.util.Logger;
-import com.dotmarketing.util.UUIDGenerator;
-import com.dotmarketing.util.UUIDUtil;
-import com.dotmarketing.util.UtilMethods;
+import com.dotmarketing.util.*;
 import com.liferay.portal.model.User;
 import org.glassfish.jersey.server.JSONP;
 
@@ -37,7 +32,7 @@ import java.util.Map;
 import static com.dotcms.util.CollectionsUtils.list;
 import static com.dotcms.util.CollectionsUtils.map;
 
-@Path("/v3/users")
+@Path("/v1/users")
 public class UserResource {
 
     private final WebResource webResource = new WebResource();
@@ -49,15 +44,26 @@ public class UserResource {
 		this.roleAPI = APILocator.getRoleAPI();
 	}
 
-	private final Map<String, List<String>> rolesMap =
-			map("member",     list(Role.DOTCMS_FRONT_END_USER, "cms_member"),
-				"subscriber", list(Role.DOTCMS_FRONT_END_USER, "cms_subscriber"));
-
 	/**
+	 * Creates a user.
+	 * If userId is sent will be use, if not will be created "userId-" + UUIDUtil.uuid().
+	 * By default, users will be inactive unless the active = true is sent and user has permissions( is Admin or access
+	 * to Users and Roles portlets).
+	 * FirstName, LastName, Email and Password are required.
+	 *
+	 *
+	 * Scenarios:
+	 *  1. No Auth or User doing the request do not have access to Users and Roles Portlets
+	 *  	- Always will be inactive
+	 *  	- Only the	Role DOTCMS_FRONT_END_USER will be added
+	 *  2. Auth, User is Admin or have access to Users and Roles Portlets
+	 *  	- Can be active if JSON includes ("active": true)
+	 *  	- The list of RoleKey will be use to assign the roles, if the roleKey doesn't exist will be
+	 *  		created under the ROOT ROLE.
 	 *
 	 * @param httpServletRequest
 	 * @param createUserForm
-	 * @return
+	 * @return User Created
 	 * @throws Exception
 	 */
 	@POST
@@ -70,21 +76,23 @@ public class UserResource {
 
 		final User modUser = new WebResource.InitBuilder(webResource)
 				.requestAndResponse(httpServletRequest, httpServletResponse)
-				// todo: any permission to check
+				.requiredAnonAccess(AnonymousAccess.WRITE)
 				.init().getUser();
 
-		final User userToUpdated = this.createNewUser(null == modUser? APILocator.systemUser(): modUser, createUserForm);
-
-		// todo: send an action email
+		final boolean isRoleAdministrator = modUser.isAdmin() || (APILocator.getLayoutAPI().doesUserHaveAccessToPortlet(PortletID.ROLES.toString(), modUser) &&
+				APILocator.getLayoutAPI().doesUserHaveAccessToPortlet(PortletID.USERS.toString(), modUser));
+		final User userToUpdated = this.createNewUser(null == modUser? APILocator.systemUser(): modUser,
+				isRoleAdministrator, createUserForm);
 
 		return Response.ok(new ResponseEntityView(map("userID", userToUpdated.getUserId(),
 				 "user", userToUpdated.toMap()))).build(); // 200
 	} // create.
 
-	protected User createNewUser(final User modUser, final CreateUserForm createUserForm) throws DotDataException, DotSecurityException, ParseException {
+	protected User createNewUser(final User modUser, final boolean isRoleAdministrator,
+								 final CreateUserForm createUserForm) throws DotDataException, DotSecurityException, ParseException {
 
-		final String nameID       = "userId-" + UUIDUtil.uuid();
-		final User user = this.userAPI.createUser(nameID, createUserForm.getEmail());
+		final String userId = UtilMethods.isSet(createUserForm.getUserId())?createUserForm.getUserId(): "userId-" + UUIDUtil.uuid();
+		final User user = this.userAPI.createUser(userId, createUserForm.getEmail());
 
 		user.setFirstName(createUserForm.getFirstName());
 
@@ -121,13 +129,19 @@ public class UserResource {
 			user.setAdditionalInfo(createUserForm.getAdditionalInfo());
 		}
 
-		user.setActive(false); // need validation confirmation email
-		this.userAPI.save(user, modUser, false);
-		Logger.debug(this,  ()-> "User with NameID '" + nameID + "' and email '" +
-				createUserForm.getEmail() + "' has been created.");
+		List<String> roleKeys = list(Role.DOTCMS_FRONT_END_USER);
 
-		final String type = UtilMethods.isSet(createUserForm.getType())?createUserForm.getType():"subscriber";
-		final List<String> roleKeys = this.rolesMap.getOrDefault(type, Collections.emptyList());
+		if (isRoleAdministrator) {
+			user.setActive(createUserForm.isActive());
+
+			if (!createUserForm.getRoles().isEmpty()) {
+				roleKeys = createUserForm.getRoles();
+			}
+		}
+
+		this.userAPI.save(user, APILocator.systemUser(), false);
+		Logger.debug(this,  ()-> "User with userId '" + userId + "' and email '" +
+				createUserForm.getEmail() + "' has been created.");
 
 		for (final String roleKey : roleKeys) {
 
@@ -136,6 +150,7 @@ public class UserResource {
 
 		return user;
 	}
+
 
 	private void addRole(final User user, final String roleKey, final boolean createRole, final boolean isSystem)
 			throws DotDataException {
@@ -167,15 +182,10 @@ public class UserResource {
 		role.setName(roleKey);
 		role.setRoleKey(roleKey);
 		role.setEditUsers(true);
-		role.setEditPermissions(false);
-		role.setEditLayouts(false);
+		role.setEditPermissions(true);
+		role.setEditLayouts(true);
 		role.setDescription("");
 		role.setId(UUIDGenerator.generateUuid());
-
-		// Setting SYSTEM role as a parent
-		role.setSystem(isSystem);
-		final Role parentRole = roleAPI.loadRoleByKey(Role.SYSTEM);
-		role.setParent(parentRole.getId());
 
 		final String date = DateUtil.getCurrentDate();
 
