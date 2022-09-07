@@ -28,30 +28,6 @@ This will build two jars in the `build/libs` directory: a bundle fragment (in or
 ---
 ## How to use
 
-Before building the plugin add custom mappings in the UserResource:
-
-```
-/**
-	 * Map of roles
-	 * The key is the type we sent in the JSON Body
-	 * The value should be the list of roles that we want the user get assigned, the role is search by key NOT by name.
-	 * In case a roleKey is sent and it doesn't exists, the role will be created under the Root Role.
-	 *
-	 * Note: A user needs the Role.DOTCMS_BACK_END_USER to be able to log in into the dotCMS.
-	 *
-	 */
-private final Map<String, List<String>> rolesMap =
-			map(
-					//DO NOT REMOVE THESE 3 MAPPINGS
-					"frontend",     list(Role.DOTCMS_FRONT_END_USER),
-				"backend", list(Role.DOTCMS_BACK_END_USER),
-				"admin", list(Role.CMS_ADMINISTRATOR_ROLE,Role.DOTCMS_BACK_END_USER)
-					//ADD NEW MAPPINGS BELOW
-					//e.g "publisher", list(Role.DOTCMS_BACK_END_USER,"publisher")
-			);
-
-```
-
 Once installed, you can access this resource by:
 
 ```
@@ -62,23 +38,37 @@ POST /api/v1/users/
 "lastName":"Test User",
 "email":"test.user@dotcms.com",
 "password":[ "P","a","s","s","w","o","r","d","1","2","3","." ],
-"type":"backend"
+"roles": ["rolekey1","rolekey2",...],
+"active": true|false
 }
 ```
 
+Required Properties:
+
+- firstName = string
+- lastName = string
+- email = string
+- password = char[]
+
+Other properties:
+- Active = boolean, default false
+- Roles = list of rolekey
+- userId = string
+	 
+Scenarios:
+
+	 1. No Auth or User doing the request do not have access to Users and Roles Portlets
+	 - Always will be inactive
+	 - Only the	Role DOTCMS_FRONT_END_USER will be added
+	 2. Auth, User is Admin or have access to Users and Roles Portlets
+	 - Can be active if JSON includes ("active": true)
+	 - The list of RoleKey will be use to assign the roles, if the roleKey doesn't exist will be
+	 created under the ROOT ROLE.
 
 
 ## Authentication
 
-This API supports the same REST auth infrastructure as other 
-rest apis in dotcms. There are 4 ways to authenticate.
-
-* user/xxx/password/yyy in the URI
-* basic http/https authentication (base64 encoded)
-* DOTAUTH header similar to basic auth and base64 encoded, e.g. setHeader("DOTAUTH", base64.encode("admin@dotcms.com:admin"))
-* Session based (form based login) for frontend or backend logged in user
-* Using a JWT bearer on the Authentication Header
-* User needs access to the USERS and ROLES portlet.
+This API allows anon users to call it, but users created that way will be inactive and will only have DOTCMS_FRONT_END_USER role added.
 
 
 

@@ -1,5 +1,6 @@
 package com.dotcms.plugin.rest;
 
+import com.dotcms.rest.AnonymousAccess;
 import com.dotcms.rest.ResponseEntityView;
 import com.dotcms.rest.WebResource;
 import com.dotcms.rest.annotation.NoCache;
@@ -44,30 +45,25 @@ public class UserResource {
 	}
 
 	/**
-	 * Map of roles
-	 * The key is the type we sent in the JSON Body
-	 * The value should be the list of roles that we want the user get assigned, the role is search by key NOT by name.
-	 * In case a roleKey is sent and it doesn't exists, the role will be created under the Root Role.
+	 * Creates a user.
+	 * If userId is sent will be use, if not will be created "userId-" + UUIDUtil.uuid().
+	 * By default, users will be inactive unless the active = true is sent and user has permissions( is Admin or access
+	 * to Users and Roles portlets).
+	 * FirstName, LastName, Email and Password are required.
 	 *
-	 * Note: A user needs the Role.DOTCMS_BACK_END_USER to be able to log in into the dotCMS.
 	 *
-	 */
-	private final Map<String, List<String>> rolesMap =
-			map(
-					//DO NOT REMOVE THESE 3 MAPPINGS
-					"frontend",     list(Role.DOTCMS_FRONT_END_USER),
-				"backend",    list(Role.DOTCMS_BACK_END_USER),
-				"admin",      list(Role.CMS_ADMINISTRATOR_ROLE, Role.DOTCMS_BACK_END_USER)
-					//ADD NEW MAPPINGS BELOW
-					//e.g "publisher", list(Role.DOTCMS_BACK_END_USER,"publisher")
-			);
-
-	/**
-	 * The user calling the endpoint needs to be able to view.
+	 * Scenarios:
+	 *  1. No Auth or User doing the request do not have access to Users and Roles Portlets
+	 *  	- Always will be inactive
+	 *  	- Only the	Role DOTCMS_FRONT_END_USER will be added
+	 *  2. Auth, User is Admin or have access to Users and Roles Portlets
+	 *  	- Can be active if JSON includes ("active": true)
+	 *  	- The list of RoleKey will be use to assign the roles, if the roleKey doesn't exist will be
+	 *  		created under the ROOT ROLE.
 	 *
 	 * @param httpServletRequest
 	 * @param createUserForm
-	 * @return
+	 * @return User Created
 	 * @throws Exception
 	 */
 	@POST
@@ -80,12 +76,14 @@ public class UserResource {
 
 		final User modUser = new WebResource.InitBuilder(webResource)
 				.requestAndResponse(httpServletRequest, httpServletResponse)
+				.requiredAnonAccess(AnonymousAccess.WRITE)
 				.init().getUser();
 
 		final boolean isRoleAdministrator = modUser.isAdmin() || (APILocator.getLayoutAPI().doesUserHaveAccessToPortlet(PortletID.ROLES.toString(), modUser) &&
 				APILocator.getLayoutAPI().doesUserHaveAccessToPortlet(PortletID.USERS.toString(), modUser));
 		final User userToUpdated = this.createNewUser(null == modUser? APILocator.systemUser(): modUser,
 				isRoleAdministrator, createUserForm);
+
 		return Response.ok(new ResponseEntityView(map("userID", userToUpdated.getUserId(),
 				 "user", userToUpdated.toMap()))).build(); // 200
 	} // create.
@@ -141,7 +139,7 @@ public class UserResource {
 			}
 		}
 
-		this.userAPI.save(user, modUser, false);
+		this.userAPI.save(user, APILocator.systemUser(), false);
 		Logger.debug(this,  ()-> "User with userId '" + userId + "' and email '" +
 				createUserForm.getEmail() + "' has been created.");
 

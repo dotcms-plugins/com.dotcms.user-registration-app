@@ -25,6 +25,8 @@ public final class CreateUserForm extends Validated  {
     @NotBlank
     private final String firstName;
     private final String middleName;
+    @NotNull
+    @NotBlank
     private final String lastName;
     private final String nickName;
     @NotNull
