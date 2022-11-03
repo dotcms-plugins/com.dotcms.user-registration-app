@@ -1,5 +1,7 @@
 package com.dotcms.plugin.rest;
 
+import com.dotcms.repackage.org.directwebremoting.WebContext;
+import com.dotcms.repackage.org.directwebremoting.WebContextFactory;
 import com.dotcms.rest.AnonymousAccess;
 import com.dotcms.rest.ResponseEntityView;
 import com.dotcms.rest.WebResource;
@@ -9,16 +11,21 @@ import com.dotmarketing.business.DotStateException;
 import com.dotmarketing.business.Role;
 import com.dotmarketing.business.RoleAPI;
 import com.dotmarketing.business.UserAPI;
+import com.dotmarketing.business.web.UserWebAPI;
+import com.dotmarketing.business.web.WebAPILocator;
 import com.dotmarketing.exception.DotDataException;
 import com.dotmarketing.exception.DotSecurityException;
+import com.dotmarketing.quartz.job.DeleteUserJob;
 import com.dotmarketing.util.*;
 import com.liferay.portal.model.User;
 import org.glassfish.jersey.server.JSONP;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.ws.rs.DELETE;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
+import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
@@ -31,6 +38,8 @@ import java.util.Map;
 
 import static com.dotcms.util.CollectionsUtils.list;
 import static com.dotcms.util.CollectionsUtils.map;
+import static com.dotmarketing.business.ajax.DwrUtil.getLoggedInUser;
+import static com.dotmarketing.business.ajax.DwrUtil.validateUsersPortletPermissions;
 
 @Path("/v1/users")
 public class UserResource {
@@ -86,6 +95,74 @@ public class UserResource {
 
 		return Response.ok(new ResponseEntityView(map("userID", userToUpdated.getUserId(),
 				 "user", userToUpdated.toMap()))).build(); // 200
+	} // create.
+
+
+	/**
+	 * Creates a user.
+	 * If userId is sent will be use, if not will be created "userId-" + UUIDUtil.uuid().
+	 * By default, users will be inactive unless the active = true is sent and user has permissions( is Admin or access
+	 * to Users and Roles portlets).
+	 * FirstName, LastName, Email and Password are required.
+	 *
+	 *
+	 * Scenarios:
+	 *  1. No Auth or User doing the request do not have access to Users and Roles Portlets
+	 *  	- Always will be inactive
+	 *  	- Only the	Role DOTCMS_FRONT_END_USER will be added
+	 *  2. Auth, User is Admin or have access to Users and Roles Portlets
+	 *  	- Can be active if JSON includes ("active": true)
+	 *  	- The list of RoleKey will be use to assign the roles, if the roleKey doesn't exist will be
+	 *  		created under the ROOT ROLE.
+	 *
+	 * @param httpServletRequest
+	 * @param createUserForm
+	 * @return User Created
+	 * @throws Exception
+	 */
+	@DELETE
+	@Path("/id/{userId}/replacing/{replacingUserId}")
+	@JSONP
+	@NoCache
+	@Produces({MediaType.APPLICATION_JSON, "application/javascript"})
+	public final Response delete(@Context final HttpServletRequest httpServletRequest,
+								 @Context final HttpServletResponse httpServletResponse,
+								 @PathParam("userId") final String userId,
+								 @PathParam("replacingUserId") final String replacingUserId) throws Exception {
+
+		final User modUser = new WebResource.InitBuilder(webResource)
+				.requestAndResponse(httpServletRequest, httpServletResponse)
+				.requiredAnonAccess(AnonymousAccess.WRITE)
+				.init().getUser();
+
+		final boolean isRoleAdministrator = modUser.isAdmin() || (APILocator.getLayoutAPI().doesUserHaveAccessToPortlet(PortletID.ROLES.toString(), modUser) &&
+				APILocator.getLayoutAPI().doesUserHaveAccessToPortlet(PortletID.USERS.toString(), modUser));
+
+		String date = DateUtil.getCurrentDate();
+
+		//Validate if this logged in user has the required permissions to access the users portlet
+		ActivityLogger.logInfo(getClass(), "Deleting User", "Date: " + date + "; "+ "User:" + userId+"; Replacing entries with User:"+replacingUserId);
+		AdminLogger.log(getClass(), "Deleting User", "Date: " + date + "; "+ "User:" + userId+"; Replacing entries with User:"+replacingUserId);
+
+		try {
+
+			final UserWebAPI userWebAPI = WebAPILocator.getUserWebAPI();
+
+			User userToDelete = this.userAPI.loadUserById(userId,userWebAPI.getLoggedInUser(httpServletRequest),false);
+			User replacementUser = this.userAPI.loadUserById(replacingUserId,userWebAPI.getLoggedInUser(httpServletRequest),false);
+			DeleteUserJob.triggerDeleteUserJob(userToDelete, replacementUser,  userWebAPI.getLoggedInUser(httpServletRequest),
+					!userWebAPI.isLoggedToBackend(httpServletRequest));
+		} catch(DotStateException e) {
+
+			ActivityLogger.logInfo(getClass(), "Error Deleting User", "Date: " + date + ";  "+ "User:" + userId);
+			AdminLogger.log(getClass(), "Error Deleting User", "Date: " + date + ";  "+ "User:" + userId);
+			throw e;
+		}
+
+		ActivityLogger.logInfo(getClass(), "User Deleted", "Date: " + date + "; "+ "User:" + userId+"; Replaced entries with User:"+replacingUserId);
+		AdminLogger.log(getClass(), "User Deleted", "Date: " + date + "; "+ "User:" + userId+"; Replaced entries with User:"+replacingUserId);
+
+		return Response.ok(new ResponseEntityView(true)).build(); // 200
 	} // create.
 
 	protected User createNewUser(final User modUser, final boolean isRoleAdministrator,
@@ -205,5 +282,7 @@ public class UserResource {
 
 		return role;
 	}
+
+
 
 }
