@@ -146,12 +146,10 @@ public class UserResource {
 
 		try {
 
-			final UserWebAPI userWebAPI = WebAPILocator.getUserWebAPI();
-
-			User userToDelete = this.userAPI.loadUserById(userId,userWebAPI.getLoggedInUser(httpServletRequest),false);
-			User replacementUser = this.userAPI.loadUserById(replacingUserId,userWebAPI.getLoggedInUser(httpServletRequest),false);
-			DeleteUserJob.triggerDeleteUserJob(userToDelete, replacementUser,  userWebAPI.getLoggedInUser(httpServletRequest),
-					!userWebAPI.isLoggedToBackend(httpServletRequest));
+			final User userToDelete    = this.userAPI.loadUserById(userId,modUser,false);
+			final User replacementUser = this.userAPI.loadUserById(replacingUserId, modUser,false);
+			DeleteUserJob.triggerDeleteUserJob(userToDelete, replacementUser, modUser,
+					PageMode.get(httpServletRequest).respectAnonPerms);
 		} catch(DotStateException e) {
 
 			ActivityLogger.logInfo(getClass(), "Error Deleting User", "Date: " + date + ";  "+ "User:" + userId);
