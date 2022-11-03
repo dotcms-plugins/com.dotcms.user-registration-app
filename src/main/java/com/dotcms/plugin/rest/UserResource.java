@@ -23,6 +23,7 @@ import org.glassfish.jersey.server.JSONP;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.ws.rs.DELETE;
+import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
@@ -54,7 +55,7 @@ public class UserResource {
 	}
 
 	/**
-	 * Creates a user.
+	 * Creates an user.
 	 * If userId is sent will be use, if not will be created "userId-" + UUIDUtil.uuid().
 	 * By default, users will be inactive unless the active = true is sent and user has permissions( is Admin or access
 	 * to Users and Roles portlets).
@@ -97,27 +98,51 @@ public class UserResource {
 				 "user", userToUpdated.toMap()))).build(); // 200
 	} // create.
 
-
 	/**
-	 * Creates a user.
-	 * If userId is sent will be use, if not will be created "userId-" + UUIDUtil.uuid().
-	 * By default, users will be inactive unless the active = true is sent and user has permissions( is Admin or access
-	 * to Users and Roles portlets).
-	 * FirstName, LastName, Email and Password are required.
-	 *
-	 *
-	 * Scenarios:
-	 *  1. No Auth or User doing the request do not have access to Users and Roles Portlets
-	 *  	- Always will be inactive
-	 *  	- Only the	Role DOTCMS_FRONT_END_USER will be added
-	 *  2. Auth, User is Admin or have access to Users and Roles Portlets
-	 *  	- Can be active if JSON includes ("active": true)
-	 *  	- The list of RoleKey will be use to assign the roles, if the roleKey doesn't exist will be
-	 *  		created under the ROOT ROLE.
+	 * Deles an user.
+	 * Receives the user id to delete and an user to replace
+	 * The replacing user id will be used to set as a reference on all contents that the user to delete
+	 * previously own.
+	 * This may be a heavy operation, so it is execute in background, the endpoint returns true but it does not
+	 * mean the user is actually deleted, since the replacement of content is happening in background and may take a while.
 	 *
 	 * @param httpServletRequest
 	 * @param createUserForm
-	 * @return User Created
+	 * @return true if the
+	 * @throws Exception
+	 */
+	@GET
+	@Path("/id/{userId}/_isDeleteInProgress")
+	@JSONP
+	@NoCache
+	@Produces({MediaType.APPLICATION_JSON, "application/javascript"})
+	public final Response isDeleteInProgress(@Context final HttpServletRequest httpServletRequest,
+								 @Context final HttpServletResponse httpServletResponse,
+								 @PathParam("userId") final String userId) throws Exception {
+
+		final User modUser = new WebResource.InitBuilder(webResource)
+				.requestAndResponse(httpServletRequest, httpServletResponse)
+				.requiredAnonAccess(AnonymousAccess.WRITE)
+				.init().getUser();
+
+		final boolean isRoleAdministrator = modUser.isAdmin() || (APILocator.getLayoutAPI().doesUserHaveAccessToPortlet(PortletID.ROLES.toString(), modUser) &&
+				APILocator.getLayoutAPI().doesUserHaveAccessToPortlet(PortletID.USERS.toString(), modUser));
+
+		final User freshUser = userAPI.loadUserById(userId);
+		return Response.ok(new ResponseEntityView(freshUser.isDeleteInProgress())).build(); // 200
+	} // isDeleteInProgress.
+
+	/**
+	 * Deles an user.
+	 * Receives the user id to delete and an user to replace
+	 * The replacing user id will be used to set as a reference on all contents that the user to delete
+	 * previously own.
+	 * This may be a heavy operation, so it is execute in background, the endpoint returns true but it does not
+	 * mean the user is actually deleted, since the replacement of content is happening in background and may take a while.
+	 *
+	 * @param httpServletRequest
+	 * @param createUserForm
+	 * @return true if the
 	 * @throws Exception
 	 */
 	@DELETE
@@ -161,7 +186,7 @@ public class UserResource {
 		AdminLogger.log(getClass(), "User Deleted", "Date: " + date + "; "+ "User:" + userId+"; Replaced entries with User:"+replacingUserId);
 
 		return Response.ok(new ResponseEntityView(true)).build(); // 200
-	} // create.
+	} // delete.
 
 	protected User createNewUser(final User modUser, final boolean isRoleAdministrator,
 								 final CreateUserForm createUserForm) throws DotDataException, DotSecurityException, ParseException {
