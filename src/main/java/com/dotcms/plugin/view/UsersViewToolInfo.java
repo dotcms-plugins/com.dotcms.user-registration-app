@@ -7,7 +7,7 @@ public class UsersViewToolInfo extends ServletToolInfo {
 
     @Override
     public String getKey () {
-        return "userstool";
+        return "myusers";
     }
 
     @Override

@@ -14,6 +14,7 @@ public class Activator extends GenericBundleActivator {
 
 		Logger.info(this.getClass(), "Adding new Restful Service:" + clazz.getSimpleName());
 		RestServiceUtil.addResource(clazz);
+		Logger.info(this.getClass(), "Adding new ViewTool :" + UsersViewToolInfo.class.getSimpleName());
 		registerViewToolService(context, new UsersViewToolInfo());
 	}
 
@@ -21,6 +22,7 @@ public class Activator extends GenericBundleActivator {
 
 		Logger.info(this.getClass(), "Removing new Restful Service:" + clazz.getSimpleName());
 		RestServiceUtil.removeResource(clazz);
+		Logger.info(this.getClass(), "Removing ViewTool :" + UsersViewToolInfo.class.getSimpleName());
 		unregisterViewToolServices();
 	}
 
