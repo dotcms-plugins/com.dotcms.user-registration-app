@@ -1,7 +1,5 @@
 package com.dotcms.plugin.rest;
 
-import com.dotcms.repackage.org.directwebremoting.WebContext;
-import com.dotcms.repackage.org.directwebremoting.WebContextFactory;
 import com.dotcms.rest.AnonymousAccess;
 import com.dotcms.rest.ResponseEntityView;
 import com.dotcms.rest.WebResource;
@@ -11,8 +9,6 @@ import com.dotmarketing.business.DotStateException;
 import com.dotmarketing.business.Role;
 import com.dotmarketing.business.RoleAPI;
 import com.dotmarketing.business.UserAPI;
-import com.dotmarketing.business.web.UserWebAPI;
-import com.dotmarketing.business.web.WebAPILocator;
 import com.dotmarketing.exception.DotDataException;
 import com.dotmarketing.exception.DotSecurityException;
 import com.dotmarketing.quartz.job.DeleteUserJob;
@@ -32,27 +28,36 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.text.ParseException;
-import java.util.Collections;
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
 
 import static com.dotcms.util.CollectionsUtils.list;
 import static com.dotcms.util.CollectionsUtils.map;
-import static com.dotmarketing.business.ajax.DwrUtil.getLoggedInUser;
-import static com.dotmarketing.business.ajax.DwrUtil.validateUsersPortletPermissions;
 
-@Path("/v1/users")
-public class UserResource {
+@Path("/v1/myusers")
+public class MyUserResource {
 
     private final WebResource webResource = new WebResource();
 	private final UserAPI userAPI;
 	private final RoleAPI roleAPI;
 
-	public UserResource() {
+	public MyUserResource() {
 		this.userAPI = APILocator.getUserAPI();
 		this.roleAPI = APILocator.getRoleAPI();
 	}
+
+	@GET
+	@JSONP
+	@NoCache
+	@Produces({MediaType.APPLICATION_JSON, "application/javascript"})
+	public final String hello(@Context final HttpServletRequest httpServletRequest,
+								 @Context final HttpServletResponse httpServletResponse,
+								 final CreateUserForm createUserForm) throws Exception {
+
+
+
+		return "Hello there"; // 200
+	} // create.
 
 	/**
 	 * Creates an user.
@@ -245,7 +250,7 @@ public class UserResource {
 
 		for (final String roleKey : roleKeys) {
 
-			this.addRole(user, roleKey, true, false);
+			this.addRole(user, roleKey, false	, false);
 		}
 
 		return user;
