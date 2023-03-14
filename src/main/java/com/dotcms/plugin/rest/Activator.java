@@ -1,5 +1,6 @@
 package com.dotcms.plugin.rest;
 
+import com.dotcms.plugin.actionlet.CreateUserActionlet;
 import com.dotcms.plugin.view.UsersViewToolInfo;
 import com.dotcms.rest.config.RestServiceUtil;
 import com.dotmarketing.osgi.GenericBundleActivator;
@@ -12,10 +13,14 @@ public class Activator extends GenericBundleActivator {
 
 	public void start(BundleContext context) throws Exception {
 
+		//Initializing services...
+		initializeServices( context );
 		Logger.info(this.getClass(), "Adding new Restful Service:" + clazz.getSimpleName());
 		RestServiceUtil.addResource(clazz);
 		Logger.info(this.getClass(), "Adding new ViewTool :" + UsersViewToolInfo.class.getSimpleName());
 		registerViewToolService(context, new UsersViewToolInfo());
+		Logger.info(this.getClass(), "Adding new Actionlet :" + CreateUserActionlet.class.getSimpleName());
+		registerActionlet( context, new CreateUserActionlet() );
 	}
 
 	public void stop(BundleContext context) throws Exception {
@@ -24,6 +29,9 @@ public class Activator extends GenericBundleActivator {
 		RestServiceUtil.removeResource(clazz);
 		Logger.info(this.getClass(), "Removing ViewTool :" + UsersViewToolInfo.class.getSimpleName());
 		unregisterViewToolServices();
+
+		//Unregister all the bundle services
+		unregisterServices(context);
 	}
 
 }
