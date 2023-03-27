@@ -1,5 +1,7 @@
 package com.dotcms.plugin.rest;
 
+import com.dotcms.repackage.org.directwebremoting.WebContext;
+import com.dotcms.repackage.org.directwebremoting.WebContextFactory;
 import com.dotcms.rest.AnonymousAccess;
 import com.dotcms.rest.ResponseEntityView;
 import com.dotcms.rest.WebResource;
@@ -9,8 +11,12 @@ import com.dotmarketing.business.DotStateException;
 import com.dotmarketing.business.Role;
 import com.dotmarketing.business.RoleAPI;
 import com.dotmarketing.business.UserAPI;
+import com.dotmarketing.business.web.UserWebAPI;
+import com.dotmarketing.business.web.WebAPILocator;
+import com.dotmarketing.exception.DoesNotExistException;
 import com.dotmarketing.exception.DotDataException;
 import com.dotmarketing.exception.DotSecurityException;
+import com.dotmarketing.portlets.user.ajax.UserAjax;
 import com.dotmarketing.quartz.job.DeleteUserJob;
 import com.dotmarketing.util.*;
 import com.liferay.portal.model.User;
@@ -28,8 +34,11 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.text.ParseException;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.dotcms.util.CollectionsUtils.list;
 import static com.dotcms.util.CollectionsUtils.map;
@@ -48,11 +57,61 @@ public class MyUserResource {
 
 	@GET
 	@JSONP
+	@Path("/_find/roles/{roleId}/fe-users")
+	@NoCache
+	@Produces({MediaType.APPLICATION_JSON, "application/javascript"})
+	public final Response findFrontEndUsersByRole(@Context final HttpServletRequest request,
+											@Context final HttpServletResponse response,
+											@PathParam("roleId")String roleId) throws Exception {
+
+		final User modUser = new WebResource.InitBuilder(webResource)
+				.requestAndResponse(request, response)
+				.requiredFrontendUser(true)
+				.rejectWhenNoUser(true).init().getUser();
+
+		Logger.debug(this, ()-> "Finding FE users by role: " + roleId);
+		final List<User> users = new ArrayList<>();
+		final Role role = this.roleAPI.loadRoleById(roleId);
+		if (null == role) {
+
+			throw new DoesNotExistException("Role not found: " + roleId);
+		}
+
+		return Response.ok(new ResponseEntityView(
+				this.roleAPI.findUsersForRole(role).stream().filter(User::isFrontendUser)
+						.map(user -> new SimpleUserView(user.getFirstName(), user.getLastName(), user.getEmailAddress()))
+						.collect(Collectors.toList())
+		)).build(); // 200
+	} // getCurrentUserRoles.
+
+	@GET
+	@JSONP
+	@Path("/roles")
+	@NoCache
+	@Produces({MediaType.APPLICATION_JSON, "application/javascript"})
+	public final Response getCurrentUserRoles(@Context final HttpServletRequest request,
+								 @Context final HttpServletResponse response) throws Exception {
+
+		final User modUser = new WebResource.InitBuilder(webResource)
+				.requestAndResponse(request, response)
+				.rejectWhenNoUser(true).init().getUser();
+
+		Logger.debug(this, ()-> "Getting current User roles for: " + modUser.getUserId());
+		final List<Map<String, Object>> roleMaps = new ArrayList<>();
+		final Role userRole    = this.roleAPI.loadRoleByKey(RoleAPI.USERS_ROOT_ROLE_KEY);
+		final List<Role> roles = this.roleAPI.loadRolesForUser(modUser.getUserId(), false);
+		roles.stream().filter(role -> !role.getDBFQN().contains(userRole.getId())).forEach(role -> roleMaps.add(role.toMap()));
+
+		return Response.ok(new ResponseEntityView(roleMaps)).build(); // 200
+	} // getCurrentUserRoles.
+
+
+	@GET
+	@JSONP
 	@NoCache
 	@Produces({MediaType.APPLICATION_JSON, "application/javascript"})
 	public final String hello(@Context final HttpServletRequest httpServletRequest,
-								 @Context final HttpServletResponse httpServletResponse,
-								 final CreateUserForm createUserForm) throws Exception {
+							  @Context final HttpServletResponse httpServletResponse) throws Exception {
 
 
 
