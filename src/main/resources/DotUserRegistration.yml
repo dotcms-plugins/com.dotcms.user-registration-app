@@ -1,0 +1,29 @@
+name: "dotCMS User Registration App"
+description: "Allows FE users to register to your dotCMS site"
+iconUrl: "https://static.dotcms.com/assets/icons/apps/prerender.png"
+allowExtraParameters: false
+params:
+  active:
+    hidden: false
+    type: "SELECT"
+    label: "Active Type"
+    hint: "Choose the type of active strategy you want to use"
+    required: true
+    value:
+      -
+        label: "InActive"
+        value: "inactive"
+        selected: true
+      -
+        label: "Active"
+        value: "active"
+      -
+        label: "Only Admin"
+        value: "onlyadmin"
+  roleWhiteList:
+    label: "Role white list"
+    value: ""
+    hidden: false
+    type: "STRING"
+    hint: "If white list is not empty, only users with these roles will be able to register"
+    required: false

@@ -1,5 +1,8 @@
 package com.dotcms.plugin.rest;
 
+import com.dotcms.plugin.app.ActiveType;
+import com.dotcms.plugin.app.AppConfig;
+import com.dotcms.plugin.app.ConfigService;
 import com.dotcms.repackage.org.directwebremoting.WebContext;
 import com.dotcms.repackage.org.directwebremoting.WebContextFactory;
 import com.dotcms.rest.AnonymousAccess;
@@ -38,6 +41,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.dotcms.util.CollectionsUtils.list;
@@ -155,8 +159,10 @@ public class MyUserResource {
 
 		final boolean isRoleAdministrator = modUser.isAdmin() || (APILocator.getLayoutAPI().doesUserHaveAccessToPortlet(PortletID.ROLES.toString(), modUser) &&
 				APILocator.getLayoutAPI().doesUserHaveAccessToPortlet(PortletID.USERS.toString(), modUser));
-		final User userToUpdated = this.createNewUser(null == modUser? APILocator.systemUser(): modUser,
-				isRoleAdministrator, createUserForm);
+		final Optional<AppConfig> config = ConfigService.INSTANCE.config(WebAPILocator.getHostWebAPI().getHost(httpServletRequest));
+		final User userToUpdated = this.createNewUser(
+				null != modUser? APILocator.getUserAPI().getAnonymousUser(): modUser,
+				isRoleAdministrator, createUserForm, config);
 
 		return Response.ok(new ResponseEntityView(map("userID", userToUpdated.getUserId(),
 				 "user", userToUpdated.toMap()))).build(); // 200
@@ -253,9 +259,12 @@ public class MyUserResource {
 	} // delete.
 
 	protected User createNewUser(final User modUser, final boolean isRoleAdministrator,
-								 final CreateUserForm createUserForm) throws DotDataException, DotSecurityException, ParseException {
+								 final CreateUserForm createUserForm,
+								 final Optional<AppConfig> optAppConfig)
+			throws DotDataException, DotSecurityException, ParseException {
 
-		final String userId = UtilMethods.isSet(createUserForm.getUserId())?createUserForm.getUserId(): "userId-" + UUIDUtil.uuid();
+		final String userId = UtilMethods.isSet(createUserForm.getUserId())?
+				createUserForm.getUserId(): "userId-" + UUIDUtil.uuid();
 		final User user = this.userAPI.createUser(userId, createUserForm.getEmail());
 
 		user.setFirstName(createUserForm.getFirstName());
@@ -293,15 +302,8 @@ public class MyUserResource {
 			user.setAdditionalInfo(createUserForm.getAdditionalInfo());
 		}
 
-		List<String> roleKeys = list(Role.DOTCMS_FRONT_END_USER);
-
-		if (isRoleAdministrator) {
-			user.setActive(createUserForm.isActive());
-
-			if (!createUserForm.getRoles().isEmpty()) {
-				roleKeys = createUserForm.getRoles();
-			}
-		}
+		checkActiveUser(user, isRoleAdministrator, createUserForm, optAppConfig);
+		final List<String> roleKeys = processRole(user, createUserForm, optAppConfig, list(Role.DOTCMS_FRONT_END_USER));
 
 		this.userAPI.save(user, APILocator.systemUser(), false);
 		Logger.debug(this,  ()-> "User with userId '" + userId + "' and email '" +
@@ -313,6 +315,42 @@ public class MyUserResource {
 		}
 
 		return user;
+	}
+
+	private List<String> processRole(final User user, final CreateUserForm createUserForm,
+									 final Optional<AppConfig> optAppConfig, final List<String> defaultRoles) {
+
+		if (optAppConfig.isPresent() &&
+				UtilMethods.isSet(optAppConfig.get().getRolesWhiteList()) &&
+				UtilMethods.isSet(createUserForm.getRoles())) {
+
+			return createUserForm.getRoles().stream()
+					.filter(rolekey -> optAppConfig.get().getRolesWhiteList().contains(rolekey))
+					.collect(Collectors.toList());
+		}
+
+		return UtilMethods.isSet(createUserForm.getRoles())? createUserForm.getRoles(): defaultRoles;
+	}
+
+	private void checkActiveUser(final User user, final boolean isRoleAdministrator,
+								 final CreateUserForm createUserForm, final Optional<AppConfig> optAppConfig) {
+
+		user.setActive(false);
+		optAppConfig.ifPresent(theConfig -> {
+
+			if (theConfig.getActiveType() != ActiveType.INACTIVE) {
+
+				if (theConfig.getActiveType() == ActiveType.ACTIVE) {
+
+					user.setActive(createUserForm.isActive());
+				}
+
+				if (theConfig.getActiveType() == ActiveType.ONLY_ADMIN && isRoleAdministrator) {
+
+					user.setActive(createUserForm.isActive());
+				}
+			}
+		});
 	}
 
 
